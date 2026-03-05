@@ -24,10 +24,12 @@ def handle_client(client_conn, client_addr):
     handles everything that happens during that connection.
     """
 
+    # Requirement IX
     # Print who connected to the server (for debugging and verification)
     print(f"[+] Connection from {client_addr}")
 
     try:
+        # Requirement VII
         # A single connection can send multiple requests.
         # This loop allows the connection to stay open and handle them.
         while True:
@@ -40,9 +42,11 @@ def handle_client(client_conn, client_addr):
             if not request_data:
                 break
 
+            # Requirement IX
             # Print the request so we can see exactly what the browser sent.
             print(f"\n--- Incoming HTTP Request ---\n{request_data}---------------------------")
 
+            # Requirement I
             # Split the request into individual lines.
             # HTTP requests are separated by line breaks.
             lines = request_data.split("\r\n")
@@ -61,6 +65,7 @@ def handle_client(client_conn, client_addr):
 
             method, path, protocol = parts
 
+            # Requirement VI
             # Security protection:
             # Prevent someone from accessing files outside the server folder.
             # Example attack: ../../passwords.txt
@@ -68,6 +73,7 @@ def handle_client(client_conn, client_addr):
                 send_response(client_conn, "403 Forbidden", "Access Denied.", method=method)
                 continue
 
+            # Requirement II
             # Our server only understands GET and HEAD requests.
             # If the browser sends something else (POST, PUT, etc),
             # we return an error.
@@ -75,6 +81,7 @@ def handle_client(client_conn, client_addr):
                 send_response(client_conn, "501 Not Implemented", "Method not supported.", method=method)
                 continue
 
+            # Requirement I
             # Remove the "/" at the start of the URL so we get the filename.
             filename = path.lstrip("/")
 
@@ -85,11 +92,13 @@ def handle_client(client_conn, client_addr):
             # Combine the folder path and filename to find the real file.
             filepath = os.path.join(ROOT_DIR, filename)
 
+            # Requirement V
             # If the file does not exist, send a 404 error.
             if not os.path.isfile(filepath):
                 send_response(client_conn, "404 Not Found", "File not found.", method=method)
                 continue
 
+            # Requirement III
             # Get the time when the file was last modified.
             file_mtime = os.path.getmtime(filepath)
 
@@ -116,6 +125,8 @@ def handle_client(client_conn, client_addr):
                     # If the file has NOT changed, we tell the browser
                     # it can use its cached copy instead of downloading again.
                     if last_mod_dt <= ims_date:
+                        # Requirement IV
+                        # 304 Not Modified response
                         send_response(
                             client_conn,
                             "304 Not Modified",
@@ -129,6 +140,7 @@ def handle_client(client_conn, client_addr):
                     # If the date format is wrong, just ignore it.
                     pass
 
+            # Requirement IV
             # If we reach here, we need to send the file normally.
 
             # Open the file and read its contents
@@ -145,6 +157,7 @@ def handle_client(client_conn, client_addr):
                 headers={"Last-Modified": last_mod_str}
             )
 
+            # Requirement VII
             # If the browser specifically asks to close the connection,
             # we end the loop and close it.
             if "Connection: close" in request_data:
@@ -169,9 +182,11 @@ def send_response(sock, status, body, is_binary=False, method="GET", headers=Non
     3. Optional body content (like the HTML file)
     """
 
+    # Requirement IV
     # Get the current time to include in the response headers
     curr_date = datetime.datetime.now(datetime.timezone.utc).strftime('%a, %d %b %Y %H:%M:%S GMT')
 
+    # Requirement IV
     # Some responses should not contain any body content.
     # HEAD requests and 304 responses must have length 0.
     if status == "304 Not Modified" or method == "HEAD":
@@ -196,12 +211,14 @@ def send_response(sock, status, body, is_binary=False, method="GET", headers=Non
     # HTTP requires headers to end with a blank line
     header_str = "\r\n".join(resp_headers) + "\r\n\r\n"
 
+    # Requirement IX
     # Print the response headers to the console
     print(f"\n--- Outgoing HTTP Response ---\n{header_str}----------------------------")
 
     # Send the headers first
     sock.sendall(header_str.encode('utf-8'))
 
+    # Requirement II & III
     # Send the body only if it's a normal GET request
     if method == "GET" and status != "304 Not Modified" and body:
         if is_binary:
@@ -218,6 +235,7 @@ def start_server():
     so multiple people can use the server at the same time.
     """
 
+    # Requirement VIII
     # Create a TCP socket (this allows computers to communicate over a network)
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -236,6 +254,7 @@ def start_server():
         # Wait until a client connects
         client_sock, addr = server.accept()
 
+        # Requirement VIII
         # Start a new thread to handle that client
         thread = threading.Thread(target=handle_client, args=(client_sock, addr))
         thread.start()
