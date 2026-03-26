@@ -46,6 +46,9 @@ def handle_client(client_conn, client_addr):
             # Print the request so we can see exactly what the browser sent.
             print(f"\n--- Incoming HTTP Request ---\n{request_data}---------------------------")
 
+            # Determine connection status for the response headers
+            conn_status = "close" if "Connection: close" in request_data else "keep-alive"
+
             # Requirement I
             # Split the request into individual lines.
             # HTTP requests are separated by line breaks.
@@ -70,7 +73,7 @@ def handle_client(client_conn, client_addr):
             # Prevent someone from accessing files outside the server folder.
             # Example attack: ../../passwords.txt
             if ".." in path or "\\" in path:
-                send_response(client_conn, "403 Forbidden", "Access Denied.", method=method)
+                send_response(client_conn, "403 Forbidden", "Access Denied.", method=method, connection_status=conn_status)
                 continue
 
             # Requirement II
@@ -78,7 +81,7 @@ def handle_client(client_conn, client_addr):
             # If the browser sends something else (POST, PUT, etc),
             # we return an error.
             if method not in ["GET", "HEAD"]:
-                send_response(client_conn, "501 Not Implemented", "Method not supported.", method=method)
+                send_response(client_conn, "501 Not Implemented", "Method not supported.", method=method, connection_status=conn_status)
                 continue
 
             # Requirement I
@@ -95,7 +98,7 @@ def handle_client(client_conn, client_addr):
             # Requirement V
             # If the file does not exist, send a 404 error.
             if not os.path.isfile(filepath):
-                send_response(client_conn, "404 Not Found", "File not found.", method=method)
+                send_response(client_conn, "404 Not Found", "File not found.", method=method, connection_status=conn_status)
                 continue
 
             # Requirement III
@@ -126,13 +129,13 @@ def handle_client(client_conn, client_addr):
                     # it can use its cached copy instead of downloading again.
                     if last_mod_dt <= ims_date:
                         # Requirement IV
-                        # 304 Not Modified response
+                        # 304 Not Modified response (Rubric: Last-Modified ONLY for 200 OK)
                         send_response(
                             client_conn,
                             "304 Not Modified",
                             "",
                             method=method,
-                            headers={"Last-Modified": last_mod_str}
+                            connection_status=conn_status
                         )
                         continue
 
@@ -154,13 +157,14 @@ def handle_client(client_conn, client_addr):
                 content,
                 is_binary=True,
                 method=method,
-                headers={"Last-Modified": last_mod_str}
+                headers={"Last-Modified": last_mod_str},
+                connection_status=conn_status
             )
 
             # Requirement VII
             # If the browser specifically asks to close the connection,
             # we end the loop and close it.
-            if "Connection: close" in request_data:
+            if conn_status == "close":
                 break
 
     except Exception as e:
@@ -172,7 +176,7 @@ def handle_client(client_conn, client_addr):
         print(f"[-] Connection closed for {client_addr}")
 
 
-def send_response(sock, status, body, is_binary=False, method="GET", headers=None):
+def send_response(sock, status, body, is_binary=False, method="GET", headers=None, connection_status="keep-alive"):
     """
     This function builds and sends an HTTP response back to the browser.
 
@@ -200,7 +204,7 @@ def send_response(sock, status, body, is_binary=False, method="GET", headers=Non
         f"Date: {curr_date}",
         f"Server: {SERVER_NAME}",
         f"Content-Length: {content_length}",
-        "Connection: keep-alive"
+        f"Connection: {connection_status}"
     ]
 
     # Add any extra headers if needed (like Last-Modified)
@@ -219,8 +223,8 @@ def send_response(sock, status, body, is_binary=False, method="GET", headers=Non
     sock.sendall(header_str.encode('utf-8'))
 
     # Requirement II & III
-    # Send the body only if it's a normal GET request
-    if method == "GET" and status != "304 Not Modified" and body:
+    # Send the body for all requests except HEAD, or if it's a 304 response
+    if method != "HEAD" and status != "304 Not Modified" and body:
         if is_binary:
             sock.sendall(body)
         else:
